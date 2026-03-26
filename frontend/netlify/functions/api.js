@@ -145,4 +145,6 @@ router.get('/health', (_, res) => res.json({ status: 'ok' }));
 app.use('/api', router);
 app.use('/.netlify/functions/api', router);
 
-module.exports.handler = serverless(app);
+module.exports.handler = serverless(app, {
+  binary: ['audio/*', 'audio/mpeg']
+});
