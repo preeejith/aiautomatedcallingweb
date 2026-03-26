@@ -211,7 +211,7 @@ export default {
 
       // ─── CONFIGURE THESE ──────────────────────────────────────────────
       // This is YOUR Node.js backend URL (see server.js below)
-      backendUrl: (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000') + '/initiate-call',
+      backendUrl: (import.meta.env.VITE_BACKEND_URL || '/api') + '/initiate-call',
       // ──────────────────────────────────────────────────────────────────
     }
   },

@@ -89,7 +89,7 @@ export default {
   name: 'ConversationHistory',
   data() {
     return {
-      backendUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000',
+      backendUrl: import.meta.env.VITE_BACKEND_URL || '/api',
       conversations: [],
       searchQuery: '',
       isLoading: true,
