@@ -16,17 +16,15 @@ const {
 const router = express.Router();
 
 router.post('/initiate-call', async (req, res) => {
-  const { to_number, customer_name } = req.body;
+  const { to_number, customer_name, partner_name, location, service_name, service_details } = req.body;
 
   // Basic validation
   if (!to_number || !customer_name) {
     return res.status(400).json({ error: 'to_number and customer_name are required.' });
   }
-  if (!to_number.startsWith('+')) {
-    return res.status(400).json({ error: 'Phone number must include country code, e.g. +91...' });
-  }
 
   try {
+    console.log(`[Netlify Function] Agent ID: ${ELEVENLABS_AGENT_ID}`);
     const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
       method: 'POST',
       headers: {
@@ -40,6 +38,10 @@ router.post('/initiate-call', async (req, res) => {
         conversation_initiation_client_data: {
           dynamic_variables: {
             user_name: customer_name,
+            partner_name: partner_name || '',
+            location: location || '',
+            service_name: service_name || '',
+            service_details: service_details || '',
           }
         }
       }),

@@ -53,7 +53,28 @@
             placeholder="e.g. +919876543210"
             :disabled="isLoading"
           />
-          <p class="field-hint">Include country code (e.g. +91 for India)</p>
+        </div>
+
+        <!-- NEW: Additional Dynamic Variables -->
+        <div class="field-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="field-group">
+            <label class="field-label">📍 Location</label>
+            <input v-model="location" type="text" class="field-input" placeholder="e.g. Delhi" :disabled="isLoading" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">🤝 Partner</label>
+            <input v-model="partnerName" type="text" class="field-input" placeholder="e.g. BestService" :disabled="isLoading" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🛠️ Service Name</label>
+          <input v-model="serviceName" type="text" class="field-input" placeholder="e.g. Plumbing" :disabled="isLoading" />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">📝 Service Details</label>
+          <textarea v-model="serviceDetails" class="field-input" style="height: 60px; resize: none;" placeholder="e.g. Tap Repair in kitchen" :disabled="isLoading"></textarea>
         </div>
       </div>
 
@@ -196,6 +217,11 @@ export default {
     return {
       customerName: '',
       phoneNumber: '',
+      partnerName: '',
+      location: '',
+      serviceName: '',
+      serviceDetails: '',
+      isDisconnecting: false,
       isLoading: false,
       callSuccess: false,
       callResponse: null,
@@ -214,6 +240,10 @@ export default {
       backendUrl: (import.meta.env.VITE_BACKEND_URL || '/api') + '/initiate-call',
       // ──────────────────────────────────────────────────────────────────
     }
+  },
+
+  mounted() {
+    this.parseUrlParams()
   },
 
   computed: {
@@ -237,6 +267,16 @@ export default {
   },
 
   methods: {
+    parseUrlParams() {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('customer_name')) this.customerName = params.get('customer_name')
+      if (params.get('phone_number'))  this.phoneNumber = params.get('phone_number')
+      if (params.get('partner_name'))  this.partnerName = params.get('partner_name')
+      if (params.get('location'))      this.location = params.get('location')
+      if (params.get('service_name'))  this.serviceName = params.get('service_name')
+      if (params.get('service_details')) this.serviceDetails = params.get('service_details')
+    },
+
     async fetchOldTranscript() {
       if (!this.oldConversationId.trim()) return
       this.isFetchingOld = true
@@ -302,8 +342,12 @@ export default {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            to_number:     this.phoneNumber.trim(),
-            customer_name: this.customerName.trim(),
+            to_number:       this.phoneNumber.trim(),
+            customer_name:   this.customerName.trim(),
+            partner_name:    this.partnerName.trim(),
+            location:        this.location.trim(),
+            service_name:    this.serviceName.trim(),
+            service_details: this.serviceDetails.trim(),
           }),
         })
 
