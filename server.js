@@ -31,7 +31,14 @@ const {
 // Called by Vue component with { to_number, customer_name }
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/initiate-call', async (req, res) => {
-  const { to_number, customer_name } = req.body
+  const {
+    to_number,
+    customer_name,
+    partner_name,
+    location,
+    service_name,
+    service_details
+  } = req.body
 
   // Basic validation
   if (!to_number || !customer_name) {
@@ -42,17 +49,11 @@ app.post('/initiate-call', async (req, res) => {
   }
 
   try {
-    /**
-     * ElevenLabs Outbound Call API
-     * Docs: https://elevenlabs.io/docs/api-reference/twilio/outbound-call
-     *
-     * conversation_initiation_client_data.dynamic_variables is where
-     * you pass the customer name (and any other personalization).
-     *
-     * In your ElevenLabs Agent prompt, use:
-     *   "Hello {{user_name}}, how can I help you today?"
-     * and it will be replaced with the actual name at call time.
-     */
+    console.log(`\n🚀 INITIATING CALL:`);
+    console.log(`   To: ${to_number}`);
+    console.log(`   Agent ID: ${ELEVENLABS_AGENT_ID}`);
+    console.log(`   Dynamic Variables:`, { customer_name, partner_name, location, service_name, service_details });
+
     const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
       method: 'POST',
       headers: {
@@ -64,13 +65,14 @@ app.post('/initiate-call', async (req, res) => {
         agent_phone_number_id: ELEVENLABS_PHONE_NUMBER_ID,
         to_number: to_number,
 
-        // ── This is the key part for dynamic name ──
+        // ── Forward all dynamic variables to ElevenLabs ──
         conversation_initiation_client_data: {
           dynamic_variables: {
-            user_name: customer_name,   // maps to {{user_name}} in your agent prompt
-            // Add more variables here if needed:
-            // company_name: "Acme Corp",
-            // order_id: "ORD-1234",
+            user_name: customer_name,   // maps to {{user_name}}
+            partner_name: partner_name || '',
+            location: location || '',
+            service_name: service_name || '',
+            service_details: service_details || '',
           }
         }
       }),
