@@ -10,8 +10,14 @@ const express = require('express')
 const cors = require('cors')
 const app = express()
 
-app.use(cors())           // Allow Vue frontend to call this
-app.use(express.json())   // Parse JSON body
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'xi-api-key'],
+  credentials: true
+}));
+app.use(express.json());   // Parse JSON body
+
 
 // ── ENV VARIABLES (put these in your .env file) ──────────────────────────────
 // ELEVENLABS_API_KEY        = xi_xxxxxxxxxxxxxxxxxxxxxxxx
