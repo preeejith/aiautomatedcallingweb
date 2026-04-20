@@ -42,6 +42,7 @@ router.post('/initiate-call', async (req, res) => {
             location: location || '',
             service_name: service_name || '',
             service_details: service_details || '',
+            phone_number: to_number,
           }
         }
       }),
@@ -90,7 +91,10 @@ router.get('/transcript/:id', async (req, res) => {
       });
     }
 
-    return res.json({ transcript: data.transcript || [] });
+    return res.json({
+      transcript: data.transcript || [],
+      metadata: data.conversation_initiation_client_data?.dynamic_variables || {}
+    });
 
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Internal server error.' });

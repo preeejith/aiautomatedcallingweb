@@ -38,7 +38,7 @@
             </tr>
           </thead>
           <tbody>
-            <template v-for="conv in filteredConversations" :key="conv.conversation_id">
+            <template v-for="conv in paginatedConversations" :key="conv.conversation_id">
               <tr class="conv-row" :class="{ 'expanded': expandedId === conv.conversation_id }">
                 <td>{{ formatDate(conv.start_time_unix_secs) }}</td>
                 <td>
@@ -60,6 +60,11 @@
                   </div>
                   <div v-else-if="transcriptError" class="transcript-error">{{ transcriptError }}</div>
                   <div v-else-if="transcriptData" class="transcript-wrapper">
+                    <!-- Caller Info -->
+                    <div v-if="transcriptMetadata && transcriptMetadata.phone_number" class="caller-box">
+                      <strong>📞 Phone Number:</strong> <span class="mono">{{ transcriptMetadata.phone_number }}</span>
+                    </div>
+
                     <!-- Audio Player -->
                     <div class="audio-container">
                       <h4 class="audio-title">🎙️ Call Recording</h4>
@@ -79,6 +84,23 @@
             </template>
           </tbody>
         </table>
+
+        <!-- Pagination Controls -->
+        <div class="pagination-controls" v-if="totalPages > 1">
+          <button 
+            :disabled="currentPage === 1" 
+            @click="currentPage--"
+            class="page-btn">
+            Previous
+          </button>
+          <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
+          <button 
+            :disabled="currentPage === totalPages" 
+            @click="currentPage++"
+            class="page-btn">
+            Next
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -97,12 +119,21 @@ export default {
       
       expandedId: null,
       transcriptData: null,
+      transcriptMetadata: null,
       isFetchingTranscript: false,
       transcriptError: '',
+      
+      currentPage: 1,
+      itemsPerPage: 20
     }
   },
   mounted() {
     this.fetchConversations()
+  },
+  watch: {
+    searchQuery() {
+      this.currentPage = 1;
+    }
   },
   computed: {
     filteredConversations() {
@@ -111,6 +142,13 @@ export default {
       return this.conversations.filter(c => 
         c.conversation_id.toLowerCase().includes(q)
       )
+    },
+    totalPages() {
+      return Math.ceil(this.filteredConversations.length / this.itemsPerPage) || 1
+    },
+    paginatedConversations() {
+      const start = (this.currentPage - 1) * this.itemsPerPage
+      return this.filteredConversations.slice(start, start + this.itemsPerPage)
     }
   },
   methods: {
@@ -141,6 +179,7 @@ export default {
       this.isFetchingTranscript = true
       this.transcriptError = ''
       this.transcriptData = null
+      this.transcriptMetadata = null
       
       try {
         const res = await fetch(`${this.backendUrl}/transcript/${id}`)
@@ -148,6 +187,7 @@ export default {
         if (!res.ok) throw new Error(data.error || 'Failed to fetch transcript')
         
         this.transcriptData = data.transcript
+        this.transcriptMetadata = data.metadata || {}
       } catch (err) {
         this.transcriptError = err.message
       } finally {
@@ -262,6 +302,8 @@ export default {
 .transcript-error { color: #f87171; font-size: 0.85rem; }
 
 .transcript-wrapper { display: flex; flex-direction: column; gap: 1rem; }
+.caller-box { background: rgba(124,92,252,0.1); border: 1px solid rgba(124,92,252,0.2); padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.85rem; color: #fff; }
+.caller-box strong { color: rgba(255,255,255,0.7); margin-right: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.75rem; }
 .audio-container { background: rgba(0,0,0,0.2); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
 .audio-title { margin: 0 0 0.5rem 0; font-size: 0.8rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Syne', sans-serif;}
 .audio-player { width: 100%; height: 38px; outline: none; }
@@ -279,4 +321,26 @@ export default {
 .msg.agent { background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.2); color: #e5e7eb; align-self: flex-start; }
 .msg.user { background: rgba(124,92,252,.1); border: 1px solid rgba(124,92,252,.2); color: #e5e7eb; align-self: flex-end; }
 .msg.info { background: transparent; color: rgba(255,255,255,0.4); font-style: italic; align-self: center; }
+
+/* Pagination */
+.pagination-controls {
+  display: flex; justify-content: center; align-items: center; gap: 1rem;
+  margin-top: 1.5rem; padding-top: 1.5rem;
+  border-top: 1px solid rgba(255,255,255,.05);
+}
+.page-btn {
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+  color: #fff; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem;
+  cursor: pointer; transition: all .2s; font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+}
+.page-btn:hover:not(:disabled) {
+  background: rgba(124,92,252,.15); border-color: #7c5cfc; color: #7c5cfc;
+}
+.page-btn:disabled {
+  opacity: 0.4; cursor: not-allowed;
+}
+.page-info {
+  font-size: 0.85rem; color: rgba(255,255,255,.6); font-weight: 500;
+}
 </style>
