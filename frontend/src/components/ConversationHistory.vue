@@ -32,6 +32,7 @@
             <tr>
               <th>Date & Time</th>
               <th>Status</th>
+              <th>Key Point / Result</th>
               <th>Call Duration</th>
               <th>Conversation ID</th>
               <th>Action</th>
@@ -43,6 +44,9 @@
                 <td>{{ formatDate(conv.start_time_unix_secs) }}</td>
                 <td>
                   <span class="status-badge" :class="conv.status">{{ conv.status || 'unknown' }}</span>
+                </td>
+                <td class="key-point-cell" :title="summariesMap[conv.conversation_id]">
+                  {{ summariesMap[conv.conversation_id] || '...' }}
                 </td>
                 <td>{{ formatDuration(conv.call_duration_secs) }}</td>
                 <td class="mono">{{ conv.conversation_id.substring(0, 12) }}...</td>
@@ -65,12 +69,53 @@
                       <strong>📞 Phone Number:</strong> <span class="mono">{{ transcriptMetadata.phone_number }}</span>
                     </div>
 
-                    <!-- Audio Player -->
-                    <div class="audio-container">
-                      <h4 class="audio-title">🎙️ Call Recording</h4>
-                      <audio controls :src="`${backendUrl}/audio/${conv.conversation_id}`" preload="none" class="audio-player"></audio>
+                    <!-- NEW: Sentiment Evaluations -->
+                    <div v-if="transcriptAnalysis && (transcriptAnalysis.call_successful || (transcriptAnalysis.evaluation_criteria_results && Object.keys(transcriptAnalysis.evaluation_criteria_results).length > 0))" class="eval-container">
+                      <h4 class="audio-title">📊 Call Evaluations</h4>
+                      <div class="eval-badges">
+                        <!-- Default: Call Success Status -->
+                        <div v-if="transcriptAnalysis.call_successful" class="eval-badge" :class="transcriptAnalysis.call_successful">
+                          <span class="eval-name">Call Status:</span>
+                          <span class="eval-status">{{ transcriptAnalysis.call_successful }}</span>
+                          <div class="eval-tooltip">Automatically determined based on the call completion and interaction quality.</div>
+                        </div>
+
+                        <!-- Custom Criteria -->
+                        <div v-for="(result, name) in transcriptAnalysis.evaluation_criteria_results" :key="name" 
+                          class="eval-badge" :class="result.result">
+                          <span class="eval-name">{{ name }}:</span>
+                          <span class="eval-status">{{ result.result }}</span>
+                          <div v-if="result.rationale" class="eval-tooltip">{{ result.rationale }}</div>
+                        </div>
+                      </div>
+
+                      <!-- Setup Guide UI for specific sentiment -->
+                      <div v-if="!transcriptAnalysis.evaluation_criteria_results || Object.keys(transcriptAnalysis.evaluation_criteria_results).length === 0" 
+                        style="margin-top: 1rem; padding: 0.75rem; background: rgba(124,92,252,0.05); border: 1px dashed rgba(124,92,252,0.3); border-radius: 8px;">
+                        <h5 style="margin: 0 0 0.4rem 0; font-size: 0.75rem; color: #7c5cfc; text-transform: uppercase;">💡 Get Smarter Highlights</h5>
+                        <p style="margin: 0; font-size: 0.7rem; color: rgba(255,255,255,0.5); line-height: 1.4;">
+                          Add an <strong>Evaluation Criterion</strong> named <strong style="color: #fff;">"Key Point"</strong> in ElevenLabs (Analysis tab) to see smart summaries like <em>"Partner needs assistance"</em> instead of just the first sentence of the transcript.
+                        </p>
+                      </div>
                     </div>
 
+                    <!-- NEW: Conversation Summary -->
+                    <div v-if="transcriptSummary" class="summary-container" style="margin-bottom: 1.5rem;">
+                      <h4 class="audio-title">📝 AI Summary</h4>
+                      <div class="summary-box">
+                        <!-- Key Point Highlight -->
+                        <div class="key-point-highlight" v-if="summariesMap[conv.conversation_id]">
+                          <strong>Quick Highlight:</strong> {{ summariesMap[conv.conversation_id] }}
+                        </div>
+                        
+                        <!-- Full Summary -->
+                        <div class="full-summary-text">
+{{ transcriptSummary }}
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Transcript Box -->
                     <div class="transcript-box">
                       <div v-if="transcriptData.length === 0" class="msg info">No messages recorded in this call.</div>
                       <div v-for="(msg, i) in transcriptData" :key="i" :class="['msg', msg.role]">
@@ -78,6 +123,13 @@
                         <span>{{ msg.message || msg.text || '...' }}</span>
                       </div>
                     </div>
+
+                    <!-- Audio Player -->
+                    <div class="audio-container" style="margin-bottom: 1.5rem;">
+                      <h4 class="audio-title">🎙️ Call Recording</h4>
+                      <audio controls :src="`${backendUrl}/audio/${conv.conversation_id}`" preload="none" class="audio-player"></audio>
+                    </div>
+
                   </div>
                 </td>
               </tr>
@@ -119,12 +171,14 @@ export default {
       
       expandedId: null,
       transcriptData: null,
+      transcriptSummary: null,
       transcriptMetadata: null,
       isFetchingTranscript: false,
       transcriptError: '',
       
       currentPage: 1,
-      itemsPerPage: 20
+      itemsPerPage: 20,
+      summariesMap: {} // { conversation_id: 'Short summary text...' }
     }
   },
   mounted() {
@@ -148,7 +202,12 @@ export default {
     },
     paginatedConversations() {
       const start = (this.currentPage - 1) * this.itemsPerPage
-      return this.filteredConversations.slice(start, start + this.itemsPerPage)
+      const rows = this.filteredConversations.slice(start, start + this.itemsPerPage)
+      
+      // Auto-fetch summaries for visible rows
+      rows.forEach(c => this.fetchRowSummary(c.conversation_id))
+      
+      return rows
     }
   },
   methods: {
@@ -179,7 +238,9 @@ export default {
       this.isFetchingTranscript = true
       this.transcriptError = ''
       this.transcriptData = null
+      this.transcriptSummary = null
       this.transcriptMetadata = null
+      this.transcriptAnalysis = null;
       
       try {
         const res = await fetch(`${this.backendUrl}/transcript/${id}`)
@@ -187,7 +248,9 @@ export default {
         if (!res.ok) throw new Error(data.error || 'Failed to fetch transcript')
         
         this.transcriptData = data.transcript
+        this.transcriptSummary = data.analysis?.transcript_summary || null
         this.transcriptMetadata = data.metadata || {}
+        this.transcriptAnalysis = data.analysis || {};
       } catch (err) {
         this.transcriptError = err.message
       } finally {
@@ -205,6 +268,46 @@ export default {
       const s = Math.floor(secs % 60)
       if (m > 0) return `${m}m ${s}s`
       return `${s}s`
+    },
+    async fetchRowSummary(id) {
+      if (this.summariesMap[id]) return // Already fetched or fetching
+      
+      // Mark as fetching to prevent duplicate calls
+      this.summariesMap[id] = 'Loading...'
+      
+      try {
+        const res = await fetch(`${this.backendUrl}/summary/${id}`)
+        const data = await res.json()
+        if (res.ok && data.summary) {
+          // Pass the analysis object which now contains evaluation_criteria_results
+          this.summariesMap[id] = this.extractKeyPoint(data.summary, data.analysis)
+        } else {
+          this.summariesMap[id] = 'No summary available'
+        }
+      } catch (err) {
+        console.error('Failed to fetch row summary:', err)
+        this.summariesMap[id] = 'Error'
+      }
+    },
+    extractKeyPoint(fullSummary, analysis) {
+      // 1. Try to find a custom 'Key Point' or 'Result' evaluation first
+      if (analysis && analysis.evaluation_criteria_results) {
+        const smartPoint = analysis.evaluation_criteria_results['Key Point'] || 
+                           analysis.evaluation_criteria_results['Result'] ||
+                           analysis.evaluation_criteria_results['Overall Result'];
+        
+        if (smartPoint && smartPoint.result) {
+          return smartPoint.result;
+        }
+      }
+
+      // 2. Fallback to the first sentence if no custom evaluation is found
+      if (!fullSummary) return '...'
+      const firstSentence = fullSummary.split(/[.!?]/)[0]
+      if (firstSentence.length > 85) {
+        return firstSentence.substring(0, 82) + '...'
+      }
+      return firstSentence + '.'
     }
   }
 }
@@ -288,6 +391,17 @@ export default {
 .status-badge.in_progress { background: rgba(124,92,252,.15); color: #7c5cfc; }
 .status-badge.failed, .status-badge.missed { background: rgba(248,113,113,.15); color: #f87171; }
 
+.key-point-cell { 
+  max-width: 200px; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  font-style: italic; 
+  color: #7c5cfc;
+  opacity: 0.9;
+  font-size: 0.8rem;
+}
+
 .view-btn {
   background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
   color: #fff; padding: 0.4rem 0.8rem; border-radius: 6px; font-size: 0.8rem;
@@ -307,6 +421,62 @@ export default {
 .audio-container { background: rgba(0,0,0,0.2); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
 .audio-title { margin: 0 0 0.5rem 0; font-size: 0.8rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Syne', sans-serif;}
 .audio-player { width: 100%; height: 38px; outline: none; }
+
+/* Evaluations UI */
+.eval-container { margin-bottom: 1.5rem; }
+.eval-badges { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.eval-badge {
+  position: relative;
+  padding: 0.5rem 0.8rem; border-radius: 8px; font-size: 0.8rem;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  display: flex; align-items: center; gap: 0.5rem; cursor: help;
+}
+.eval-badge.success, .eval-badge.positive { background: rgba(52,211,153,0.1); border-color: rgba(52,211,153,0.3); color: #34d399; }
+.eval-badge.failure, .eval-badge.aggression, .eval-badge.negative { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); color: #f87171; }
+.eval-badge.normal, .eval-badge.neutral { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); }
+.eval-badge.curiosity, .eval-badge.satisfied { background: rgba(124,92,252,0.1); border-color: rgba(124,92,252,0.3); color: #7c5cfc; }
+.eval-name { font-weight: 600; opacity: 0.8; }
+.eval-status { text-transform: uppercase; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.05em; }
+.eval-tooltip {
+  position: absolute; bottom: 100%; left: 0; width: 250px;
+  background: #1f1f2e; border: 1px solid rgba(255,255,255,0.1);
+  padding: 0.75rem; border-radius: 8px; font-size: 0.75rem; color: rgba(255,255,255,0.8);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4); pointer-events: none;
+  opacity: 0; transform: translateY(10px); transition: all 0.2s; z-index: 10;
+}
+.eval-badge:hover .eval-tooltip { opacity: 1; transform: translateY(-5px); }
+
+/* Summary UI */
+.summary-container {
+  background: rgba(124, 92, 252, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(124, 92, 252, 0.2);
+  padding: 1.25rem;
+}
+.summary-box {
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+.key-point-highlight {
+  background: rgba(124, 92, 252, 0.1);
+  border-left: 3px solid #7c5cfc;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #fff;
+}
+.key-point-highlight strong {
+  color: #7c5cfc;
+  margin-right: 0.5rem;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+.full-summary-text {
+  opacity: 0.8;
+}
 
 /* Transcript UI inside table */
 .transcript-box {

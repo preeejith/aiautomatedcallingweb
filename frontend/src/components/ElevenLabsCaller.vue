@@ -127,6 +127,43 @@
         </div>
 
         <div v-if="transcript" class="transcript-wrapper" style="margin-top: 1rem;">
+          <!-- NEW: Sentiment Evaluations -->
+          <div v-if="analysis && (analysis.call_successful || (analysis.evaluation_criteria_results && Object.keys(analysis.evaluation_criteria_results).length > 0))" class="eval-container">
+            <h4 class="audio-title">📊 Call Evaluations</h4>
+            <div class="eval-badges">
+              <!-- Default: Call Success Status -->
+              <div v-if="analysis.call_successful" class="eval-badge" :class="analysis.call_successful">
+                <span class="eval-name">Call Status:</span>
+                <span class="eval-status">{{ analysis.call_successful }}</span>
+                <div class="eval-tooltip">Automatically determined based on the call completion and interaction quality.</div>
+              </div>
+
+              <!-- Custom Criteria -->
+              <div v-for="(result, name) in analysis.evaluation_criteria_results" :key="name" 
+                class="eval-badge" :class="result.result">
+                <span class="eval-name">{{ name }}:</span>
+                <span class="eval-status">{{ result.result }}</span>
+                <div v-if="result.rationale" class="eval-tooltip">{{ result.rationale }}</div>
+              </div>
+            </div>
+
+            <!-- Setup Guide UI for specific sentiment -->
+            <div v-if="!analysis.evaluation_criteria_results || Object.keys(analysis.evaluation_criteria_results).length === 0" 
+              style="margin-top: 0.75rem; padding: 0.6rem; background: rgba(124,92,252,0.04); border: 1px dashed rgba(124,92,252,0.2); border-radius: 6px;">
+              <h5 style="margin: 0 0 0.3rem 0; font-size: 0.7rem; color: #7c5cfc; text-transform: uppercase;">💡 Want specific sentiment (Aggression)?</h5>
+              <p style="margin: 0; font-size: 0.65rem; color: rgba(255,255,255,0.4); line-height: 1.3;">
+                Add an <strong>Evaluation Criterion</strong> named "Aggression" or "Sentiment" in your ElevenLabs Analysis settings to see live badges here.
+              </p>
+            </div>
+          </div>
+          <!-- NEW: Conversation Summary -->
+          <div v-if="summary" class="summary-container" style="margin-bottom: 1.25rem;">
+            <h4 class="audio-title">📝 AI Summary</h4>
+            <div class="summary-box">
+              {{ summary }}
+            </div>
+          </div>
+
           <div class="audio-container" style="margin-bottom: 0.75rem;">
             <h4 class="audio-title">🎙️ Audio Recording</h4>
             <audio controls :src="`${backendUrl}/audio/${callResponse.conversationId}`" preload="none" class="audio-player"></audio>
@@ -169,6 +206,14 @@
         </div>
 
         <div v-if="oldTranscript" class="transcript-wrapper" style="margin-top: 0.75rem;">
+          <!-- NEW: Old Conversation Summary -->
+          <div v-if="oldSummary" class="summary-container" style="margin-bottom: 1rem;">
+            <h4 class="audio-title">📝 AI Summary</h4>
+            <div class="summary-box" style="font-size: 0.85rem;">
+              {{ oldSummary }}
+            </div>
+          </div>
+
           <div class="audio-container" style="margin-bottom: 0.75rem;">
             <h4 class="audio-title">🎙️ Audio Recording</h4>
             <audio controls :src="`${backendUrl}/audio/${oldConversationId.trim()}`" preload="none" class="audio-player"></audio>
@@ -228,10 +273,12 @@ export default {
       errorMessage: '',
       status: 'idle', // idle | calling | success | error
       transcript: null,
+      summary: null,
       isFetchingTranscript: false,
       
       oldConversationId: '',
       oldTranscript: null,
+      oldSummary: null,
       isFetchingOld: false,
       oldTranscriptError: '',
 
@@ -289,6 +336,7 @@ export default {
         if (!response.ok) throw new Error(data.error || 'Failed to fetch transcript')
         
         this.oldTranscript = data.transcript
+        this.oldSummary = data.analysis?.summary || null
       } catch (err) {
         this.oldTranscriptError = err.message
       } finally {
@@ -307,6 +355,7 @@ export default {
         if (!response.ok) throw new Error(data.error || 'Failed to fetch transcript')
         
         this.transcript = data.transcript
+        this.summary = data.analysis?.summary || null
       } catch (err) {
         this.errorMessage = 'Transcript Error: ' + err.message
       } finally {
@@ -333,6 +382,7 @@ export default {
       this.errorMessage = ''
       this.callResponse = null
       this.transcript   = null
+      this.summary      = null
       this.callSuccess  = false
       this.isLoading    = true
       this.status       = 'calling'
@@ -572,6 +622,30 @@ export default {
 .audio-container { background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
 .audio-title { margin: 0 0 0.5rem 0; font-size: 0.75rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Syne', sans-serif;}
 .audio-player { width: 100%; height: 36px; outline: none; }
+
+/* Evaluations UI */
+.eval-container { margin-bottom: 1rem; }
+.eval-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.eval-badge {
+  position: relative;
+  padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.75rem;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  display: flex; align-items: center; gap: 0.4rem; cursor: help;
+}
+.eval-badge.success, .eval-badge.positive { background: rgba(52,211,153,0.1); border-color: rgba(52,211,153,0.3); color: #34d399; }
+.eval-badge.failure, .eval-badge.aggression, .eval-badge.negative { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); color: #f87171; }
+.eval-badge.normal, .eval-badge.neutral { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); }
+.eval-badge.curiosity, .eval-badge.satisfied { background: rgba(124,92,252,0.1); border-color: rgba(124,92,252,0.3); color: #7c5cfc; }
+.eval-name { font-weight: 600; opacity: 0.8; }
+.eval-status { text-transform: uppercase; font-weight: 800; font-size: 0.65rem; letter-spacing: 0.05em; }
+.eval-tooltip {
+  position: absolute; bottom: 100%; left: 0; width: 220px;
+  background: #1f1f2e; border: 1px solid rgba(255,255,255,0.1);
+  padding: 0.6rem; border-radius: 6px; font-size: 0.7rem; color: rgba(255,255,255,0.8);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4); pointer-events: none;
+  opacity: 0; transform: translateY(10px); transition: all 0.2s; z-index: 10;
+}
+.eval-badge:hover .eval-tooltip { opacity: 1; transform: translateY(-5px); }
 
 .transcript-box {
   background: rgba(0,0,0,0.2);

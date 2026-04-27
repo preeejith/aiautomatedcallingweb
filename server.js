@@ -109,6 +109,28 @@ app.post('/initiate-call', async (req, res) => {
   }
 })
 
+// ── GET /summary/:id ───────────────────────────────────────────────────────────
+// Returns ONLY the 2-3 sentence summary for a specific conversation
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/summary/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const response = await fetch(`https://api.elevenlabs.io/v1/convai/conversations/${id}`, {
+      method: 'GET',
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY }
+    });
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json({ error: 'Failed to fetch' });
+
+    return res.json({
+      summary: data.analysis?.transcript_summary || "Summary not generated yet.",
+      analysis: data.analysis || null
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /transcript/:id ─────────────────────────────────────────────────────────
 // Called by Vue component to get the conversation transcript
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,7 +157,8 @@ app.get('/transcript/:id', async (req, res) => {
 
     return res.json({
       transcript: data.transcript || [],
-      metadata: data.conversation_initiation_client_data?.dynamic_variables || {}
+      metadata: data.conversation_initiation_client_data?.dynamic_variables || {},
+      analysis: data.analysis || null
     })
 
   } catch (err) {
@@ -182,7 +205,14 @@ app.get('/audio/:id', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/conversations', async (req, res) => {
   try {
-    const response = await fetch(`https://api.elevenlabs.io/v1/convai/conversations?agent_id=${ELEVENLABS_AGENT_ID}`, {
+    const { page_size = 30, cursor } = req.query;
+    let url = `https://api.elevenlabs.io/v1/convai/conversations?agent_id=${ELEVENLABS_AGENT_ID}&page_size=${page_size}`;
+
+    if (cursor) {
+      url += `&start_after_id=${cursor}`;
+    }
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: { 'xi-api-key': ELEVENLABS_API_KEY }
     })
@@ -192,6 +222,7 @@ app.get('/conversations', async (req, res) => {
       return res.status(response.status).json({ error: data?.detail?.message || 'Failed to fetch conversations' })
     }
 
+    // ElevenLabs returns { conversations: [...], has_more: true/false, last_conversation_id: "..." }
     return res.json(data)
   } catch (err) {
     console.error('Server error fetching conversations:', err)
