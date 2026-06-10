@@ -4,13 +4,23 @@
       <h2 class="title">Call History</h2>
       <p class="subtitle">All phone calls made by your agent</p>
 
-      <div class="search-bar" v-if="!isLoading && !errorMessage && conversations.length > 0">
-        <input 
-          v-model="searchQuery" 
-          type="text" 
-          class="field-input" 
-          placeholder="🔍 Search by Conversation ID..." 
-        />
+      <div class="controls-row" v-if="!isLoading && !errorMessage">
+        <div class="search-bar">
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            class="field-input" 
+            placeholder="🔍 Search by ID..." 
+          />
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">Filter Agent:</label>
+          <select v-model="selectedAgentId" class="select-input" @change="fetchConversations">
+            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+              {{ agent.name }}
+            </option>
+          </select>
+        </div>
       </div>
 
       <div v-if="isLoading" class="loading-state">
@@ -169,6 +179,12 @@ export default {
       isLoading: true,
       errorMessage: '',
       
+      selectedAgentId: '',
+      agents: [
+        { name: 'Service Booking Agent (Default)', id: '' },
+        { name: 'Registration Agent', id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785' }
+      ],
+
       expandedId: null,
       transcriptData: null,
       transcriptSummary: null,
@@ -214,8 +230,16 @@ export default {
     async fetchConversations() {
       this.isLoading = true
       this.errorMessage = ''
+      this.currentPage = 1
+      this.summariesMap = {}
+      this.expandedId = null
+      this.transcriptData = null
       try {
-        const res = await fetch(`${this.backendUrl}/conversations`)
+        let url = `${this.backendUrl}/conversations`
+        if (this.selectedAgentId) {
+          url += `?agent_id=${this.selectedAgentId}`
+        }
+        const res = await fetch(url)
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Failed to fetch history')
         
@@ -512,5 +536,53 @@ export default {
 }
 .page-info {
   font-size: 0.85rem; color: rgba(255,255,255,.6); font-weight: 500;
+}
+
+/* Filtering Row Styles */
+.controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+.controls-row .search-bar {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 200px;
+}
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.filter-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.select-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  color: #fff;
+  font-size: 0.85rem;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.select-input:focus {
+  border-color: #7c5cfc;
+  background: rgba(124, 92, 252, 0.05);
+}
+.select-input option {
+  background: #13131a;
+  color: #fff;
 }
 </style>

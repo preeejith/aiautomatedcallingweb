@@ -22,7 +22,7 @@ const currentView = ref('caller')
     </main>
   </div>
 </template>
-
+<!-- /* Remove default Vite styling for full screen apps */ -->
 <style>
 /* Remove default Vite styling for full screen apps */
 body {

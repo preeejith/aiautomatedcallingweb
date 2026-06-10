@@ -16,6 +16,28 @@
         <p class="subtitle">Powered by Ohyes Ai</p>
       </div>
 
+      <!-- Agent Selector -->
+      <div class="agent-selector">
+        <button 
+          class="agent-tab" 
+          :class="{ active: selectedAgent === 'booking' }"
+          @click="selectedAgent = 'booking'"
+          :disabled="isLoading"
+        >
+          <span class="tab-icon">🛠️</span>
+          <span class="tab-label">Service Booking</span>
+        </button>
+        <button 
+          class="agent-tab" 
+          :class="{ active: selectedAgent === 'registration' }"
+          @click="selectedAgent = 'registration'"
+          :disabled="isLoading"
+        >
+          <span class="tab-icon">📋</span>
+          <span class="tab-label">Registration</span>
+        </button>
+      </div>
+
       <!-- Status Bar -->
       <div class="status-bar" :class="statusClass">
         <div class="status-dot"></div>
@@ -55,27 +77,53 @@
           />
         </div>
 
-        <!-- NEW: Additional Dynamic Variables -->
-        <div class="field-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-          <div class="field-group">
-            <label class="field-label">📍 Location</label>
-            <input v-model="location" type="text" class="field-input" placeholder="e.g. Delhi" :disabled="isLoading" />
+        <!-- SERVICE BOOKING AGENT SPECIFIC FIELDS -->
+        <template v-if="selectedAgent === 'booking'">
+          <!-- NEW: Additional Dynamic Variables -->
+          <div class="field-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="field-group">
+              <label class="field-label">📍 Location</label>
+              <input v-model="location" type="text" class="field-input" placeholder="e.g. Delhi" :disabled="isLoading" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">🤝 Partner</label>
+              <input v-model="partnerName" type="text" class="field-input" placeholder="e.g. BestService" :disabled="isLoading" />
+            </div>
           </div>
+
           <div class="field-group">
-            <label class="field-label">🤝 Partner</label>
-            <input v-model="partnerName" type="text" class="field-input" placeholder="e.g. BestService" :disabled="isLoading" />
+            <label class="field-label">🛠️ Service Name</label>
+            <input v-model="serviceName" type="text" class="field-input" placeholder="e.g. Plumbing" :disabled="isLoading" />
           </div>
-        </div>
 
-        <div class="field-group">
-          <label class="field-label">🛠️ Service Name</label>
-          <input v-model="serviceName" type="text" class="field-input" placeholder="e.g. Plumbing" :disabled="isLoading" />
-        </div>
+          <div class="field-group">
+            <label class="field-label">📝 Service Details</label>
+            <textarea v-model="serviceDetails" class="field-input" style="height: 60px; resize: none;" placeholder="e.g. Tap Repair in kitchen" :disabled="isLoading"></textarea>
+          </div>
+        </template>
 
-        <div class="field-group">
-          <label class="field-label">📝 Service Details</label>
-          <textarea v-model="serviceDetails" class="field-input" style="height: 60px; resize: none;" placeholder="e.g. Tap Repair in kitchen" :disabled="isLoading"></textarea>
-        </div>
+        <!-- REGISTRATION AGENT SPECIFIC FIELDS -->
+        <template v-else-if="selectedAgent === 'registration'">
+          <div class="field-group">
+            <label class="field-label">📧 Email Address</label>
+            <input v-model="email" type="email" class="field-input" placeholder="e.g. arjun@example.com" :disabled="isLoading" />
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">⚙️ Registration Status</label>
+            <div class="checkbox-wrapper" @click="registrationPending = !registrationPending">
+              <input v-model="registrationPending" type="checkbox" id="regPending" class="checkbox-input" @click.stop />
+              <label for="regPending" class="checkbox-label" @click.stop="registrationPending = !registrationPending">
+                Registration Pending (Missing fields)
+              </label>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">⚠️ Missing Data Details</label>
+            <input v-model="remainingData" type="text" class="field-input" placeholder="e.g. Email is missing, please verify" :disabled="isLoading" />
+          </div>
+        </template>
       </div>
 
       <!-- Call Button -->
@@ -98,6 +146,23 @@
           Call Initiated!
         </span>
       </button>
+
+      <!-- In-Browser Widget Toggle for Registration Agent -->
+      <div v-if="selectedAgent === 'registration'" class="widget-section">
+        <button 
+          class="widget-toggle-btn"
+          @click="toggleBrowserWidget"
+        >
+          <span>💬 {{ showBrowserWidget ? 'Hide Browser Chat Agent' : 'Start In-Browser Chat Agent' }}</span>
+        </button>
+        
+        <div v-if="showBrowserWidget" class="browser-widget-container animate-fade-in">
+          <p class="field-hint" style="margin-bottom: 0.5rem; text-align: center;">Speak directly with the Registration Agent in your browser:</p>
+          <div class="elevenlabs-widget-wrapper">
+            <div v-html="widgetHtml"></div>
+          </div>
+        </div>
+      </div>
 
       <!-- Response Info -->
       <div v-if="callResponse" class="response-card">
@@ -260,12 +325,20 @@ export default {
 
   data() {
     return {
+      selectedAgent: 'booking', // booking | registration
       customerName: '',
       phoneNumber: '',
       partnerName: '',
       location: '',
       serviceName: '',
       serviceDetails: '',
+      
+      // Registration Agent fields
+      email: '',
+      registrationPending: true,
+      remainingData: '',
+      showBrowserWidget: false,
+
       isDisconnecting: false,
       isLoading: false,
       callSuccess: false,
@@ -310,6 +383,9 @@ export default {
         'status-success': this.status === 'success',
         'status-error':   this.status === 'error',
       }
+    },
+    widgetHtml() {
+      return '<elevenlabs-convai agent-id="agent_8701ksmkp18cfm6t0a4mrqjhr785"></elevenlabs-convai>';
     }
   },
 
@@ -322,6 +398,15 @@ export default {
       if (params.get('location'))      this.location = params.get('location')
       if (params.get('service_name'))  this.serviceName = params.get('service_name')
       if (params.get('service_details')) this.serviceDetails = params.get('service_details')
+      if (params.get('email'))         this.email = params.get('email')
+      if (params.get('registration_pending')) this.registrationPending = params.get('registration_pending') === 'true'
+      if (params.get('remaining_data')) this.remainingData = params.get('remaining_data')
+      if (params.get('agent')) {
+        const agentParam = params.get('agent').toLowerCase()
+        if (agentParam === 'registration' || agentParam === 'booking') {
+          this.selectedAgent = agentParam
+        }
+      }
     },
 
     async fetchOldTranscript() {
@@ -363,6 +448,25 @@ export default {
       }
     },
 
+    toggleBrowserWidget() {
+      this.showBrowserWidget = !this.showBrowserWidget;
+      if (this.showBrowserWidget) {
+        this.loadWidgetScript();
+      }
+    },
+
+    loadWidgetScript() {
+      const scriptId = 'elevenlabs-widget-script';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://unpkg.com/@elevenlabs/convai-widget-embed';
+        script.async = true;
+        script.type = 'text/javascript';
+        document.body.appendChild(script);
+      }
+    },
+
     async initiateCall() {
       // Validation
       if (!this.customerName.trim()) {
@@ -387,18 +491,29 @@ export default {
       this.isLoading    = true
       this.status       = 'calling'
 
+      // Construct dynamic payload
+      const payload = {
+        to_number:       this.phoneNumber.trim(),
+        customer_name:   this.customerName.trim(),
+        agent_id:        this.selectedAgent === 'registration' ? 'agent_8701ksmkp18cfm6t0a4mrqjhr785' : undefined,
+      }
+
+      if (this.selectedAgent === 'booking') {
+        payload.partner_name = this.partnerName.trim()
+        payload.location = this.location.trim()
+        payload.service_name = this.serviceName.trim()
+        payload.service_details = this.serviceDetails.trim()
+      } else {
+        payload.email = this.email.trim()
+        payload.registration_pending = this.registrationPending
+        payload.remaining_data = this.remainingData.trim()
+      }
+
       try {
         const response = await fetch(this.backendUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to_number:       this.phoneNumber.trim(),
-            customer_name:   this.customerName.trim(),
-            partner_name:    this.partnerName.trim(),
-            location:        this.location.trim(),
-            service_name:    this.serviceName.trim(),
-            service_details: this.serviceDetails.trim(),
-          }),
+          body: JSON.stringify(payload),
         })
 
         const data = await response.json()
@@ -729,4 +844,130 @@ export default {
   font-size: .75rem; color: rgba(255,255,255,.5);
 }
 .info-step em { color: rgba(255,255,255,.5); font-style:italic; }
+
+/* Agent Selection Styles */
+.agent-selector {
+  display: flex;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 1.5rem;
+}
+.agent-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.agent-tab:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.02);
+}
+.agent-tab.active {
+  background: rgba(124, 92, 252, 0.15);
+  color: #7c5cfc;
+}
+.agent-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Checkbox Styles */
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.checkbox-wrapper:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.checkbox-input {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  accent-color: #7c5cfc;
+  cursor: pointer;
+}
+.checkbox-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Web Widget styles */
+.widget-section {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.widget-toggle-btn {
+  background: rgba(124, 92, 252, 0.06);
+  border: 1px dashed rgba(124, 92, 252, 0.25);
+  color: #7c5cfc;
+  padding: 0.8rem;
+  border-radius: 12px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.widget-toggle-btn:hover {
+  background: rgba(124, 92, 252, 0.12);
+  border-color: #7c5cfc;
+  transform: translateY(-1px);
+}
+.browser-widget-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 1.25rem;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+}
+.elevenlabs-widget-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  min-height: 120px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
