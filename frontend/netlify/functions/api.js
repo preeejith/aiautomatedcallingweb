@@ -21,59 +21,164 @@ const {
 
 const router = express.Router();
 
-router.post('/initiate-call', async (req, res) => {
-  const { to_number, customer_name, partner_name, location, service_name, service_details } = req.body;
-
-  // Basic validation
-  if (!to_number || !customer_name) {
-    return res.status(400).json({ error: 'to_number and customer_name are required.' });
+// Helper to initiate Twilio outbound calls via ElevenLabs API
+async function triggerOutboundCall({
+  agent_id,
+  to_number,
+  customer_name,
+  dynamic_variables = {}
+}) {
+  if (!to_number) {
+    throw new Error('to_number is required.');
   }
 
-  try {
-    console.log(`[Netlify Function] Agent ID: ${ELEVENLABS_AGENT_ID}`);
-    const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': ELEVENLABS_API_KEY,
-      },
-      body: JSON.stringify({
-        agent_id: ELEVENLABS_AGENT_ID,
-        agent_phone_number_id: ELEVENLABS_PHONE_NUMBER_ID,
-        to_number: to_number,
-        conversation_initiation_client_data: {
-          dynamic_variables: {
-            user_name: customer_name,
-            partner_name: partner_name || '',
-            location: location || '',
-            service_name: service_name || '',
-            service_details: service_details || '',
-            phone_number: to_number,
-          }
+  // Fallback if name is empty, missing, or null
+  const finalCustomerName = (customer_name && customer_name.trim()) ? customer_name.trim() : 'Partner';
+
+  const selectedAgentId = agent_id || ELEVENLABS_AGENT_ID;
+
+  console.log(`[Netlify Function] INITIATING OUTBOUND CALL:`);
+  console.log(`   To: ${to_number}`);
+  console.log(`   Agent ID: ${selectedAgentId}`);
+
+  const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'xi-api-key': ELEVENLABS_API_KEY,
+    },
+    body: JSON.stringify({
+      agent_id: selectedAgentId,
+      agent_phone_number_id: ELEVENLABS_PHONE_NUMBER_ID,
+      to_number: to_number,
+      conversation_initiation_client_data: {
+        dynamic_variables: {
+          user_name: finalCustomerName,
+          name: finalCustomerName,
+          user_name_there: finalCustomerName,
+          phone_number: to_number,
+          ...dynamic_variables
         }
-      }),
+      }
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('ElevenLabs API error:', data);
+    throw new Error(data?.detail?.message || data?.message || 'ElevenLabs API call failed.');
+  }
+
+  return {
+    success: true,
+    message: `Call initiated to ${finalCustomerName}`,
+    conversation_id: data.conversation_id || null,
+    callSid: data.callSid || null,
+  };
+}
+
+// ── POST /initiate-call ───────────────────────────────────────────────────────
+// Generic initiate call route
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/initiate-call', async (req, res) => {
+  try {
+    const {
+      to_number,
+      customer_name,
+      agent_id,
+      email,
+      registration_pending,
+      remaining_data,
+      partner_name,
+      location,
+      service_name,
+      service_details
+    } = req.body;
+
+    const result = await triggerOutboundCall({
+      agent_id,
+      to_number,
+      customer_name,
+      dynamic_variables: {
+        email: email || '',
+        registration_pending: registration_pending !== undefined ? String(registration_pending) : 'true',
+        remaining_data: remaining_data || '',
+        partner_name: partner_name || '',
+        location: location || '',
+        service_name: service_name || '',
+        service_details: service_details || '',
+      }
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('ElevenLabs API error:', data);
-      return res.status(response.status).json({
-        error: data?.detail?.message || data?.message || 'ElevenLabs API call failed.',
-        raw: data,
-      });
-    }
-
-    return res.json({
-      success: true,
-      message: `Call initiated to ${customer_name}`,
-      conversation_id: data.conversation_id || null,
-      callSid: data.callSid || null,
-    });
-
+    return res.json(result);
   } catch (err) {
-    console.error('Server error:', err);
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    console.error('[Netlify Function] Outbound call error:', err);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// ── POST /initiate-booking ────────────────────────────────────────────────────
+// Specific Service Booking Trigger API
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/initiate-booking', async (req, res) => {
+  try {
+    const {
+      to_number,
+      customer_name,
+      partner_name,
+      location,
+      service_name,
+      service_details
+    } = req.body;
+
+    const result = await triggerOutboundCall({
+      agent_id: ELEVENLABS_AGENT_ID,
+      to_number,
+      customer_name,
+      dynamic_variables: {
+        partner_name: partner_name || '',
+        location: location || '',
+        service_name: service_name || '',
+        service_details: service_details || '',
+      }
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[Netlify Function] Booking call error:', err);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// ── POST /initiate-registration ────────────────────────────────────────────────
+// Specific Registration Trigger API
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/initiate-registration', async (req, res) => {
+  try {
+    const {
+      to_number,
+      customer_name,
+      email,
+      registration_pending,
+      remaining_data
+    } = req.body;
+
+    const result = await triggerOutboundCall({
+      agent_id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785',
+      to_number,
+      customer_name,
+      dynamic_variables: {
+        email: email || '',
+        registration_pending: registration_pending !== undefined ? String(registration_pending) : 'true',
+        remaining_data: remaining_data || '',
+      }
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[Netlify Function] Registration call error:', err);
+    return res.status(400).json({ error: err.message });
   }
 });
 
@@ -160,8 +265,9 @@ router.get('/audio/:id', async (req, res) => {
 
 router.get('/conversations', async (req, res) => {
   try {
-    const { page_size = 30, cursor } = req.query;
-    let url = `https://api.elevenlabs.io/v1/convai/conversations?agent_id=${ELEVENLABS_AGENT_ID}&page_size=${page_size}`;
+    const { page_size = 30, cursor, agent_id } = req.query;
+    const selectedAgentId = agent_id || ELEVENLABS_AGENT_ID;
+    let url = `https://api.elevenlabs.io/v1/convai/conversations?agent_id=${selectedAgentId}&page_size=${page_size}`;
 
     if (cursor) {
       url += `&start_after_id=${cursor}`;
