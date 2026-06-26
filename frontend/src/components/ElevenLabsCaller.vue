@@ -45,6 +45,15 @@
           <span class="tab-icon">✅</span>
           <span class="tab-label">Confirm Booking</span>
         </button>
+        <button 
+          class="agent-tab" 
+          :class="{ active: selectedAgent === 'unregistered_partner' }"
+          @click="selectedAgent = 'unregistered_partner'"
+          :disabled="isLoading"
+        >
+          <span class="tab-icon">🤝</span>
+          <span class="tab-label">Unregistered Partner</span>
+        </button>
       </div>
 
       <!-- Status Bar -->
@@ -59,13 +68,13 @@
         <div class="field-group">
           <label class="field-label">
             <span class="label-icon">👤</span>
-            Customer Name
+            {{ selectedAgent === 'unregistered_partner' ? 'Business Name' : 'Customer Name' }}
           </label>
           <input
             v-model="customerName"
             type="text"
             class="field-input"
-            placeholder="e.g. Arjun Kumar"
+            :placeholder="selectedAgent === 'unregistered_partner' ? 'e.g. Acme Cleaning' : 'e.g. Arjun Kumar'"
             :disabled="isLoading"
           />
           <p class="field-hint">This name will be used by the AI agent dynamically</p>
@@ -157,6 +166,25 @@
             <span>Sam will greet <strong>{{ customerName || 'the customer' }}</strong> and confirm all booking details over the call.</span>
           </div>
         </template>
+
+        <!-- UNREGISTERED PARTNER AGENT SPECIFIC FIELDS -->
+        <template v-else-if="selectedAgent === 'unregistered_partner'">
+          <div class="field-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="field-group">
+              <label class="field-label">🏢 Company Name</label>
+              <input v-model="companyName" type="text" class="field-input" placeholder="e.g. Ohyes" :disabled="isLoading" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">🏷️ Business Category</label>
+              <input v-model="businessCategory" type="text" class="field-input" placeholder="e.g. Cleaning" :disabled="isLoading" />
+            </div>
+          </div>
+
+          <div class="confirmation-note">
+            <span class="note-icon">💡</span>
+            <span>Sam will invite <strong>{{ customerName || 'the partner' }}</strong> to join {{ companyName || 'Ohyes' }} Partner App.</span>
+          </div>
+        </template>
       </div>
 
       <!-- Call Button -->
@@ -180,8 +208,8 @@
         </span>
       </button>
 
-      <!-- In-Browser Widget Toggle for Registration Agent -->
-      <div v-if="selectedAgent === 'registration'" class="widget-section">
+      <!-- In-Browser Widget Toggle for Registration / Unregistered Partner Agent -->
+      <div v-if="selectedAgent === 'registration' || selectedAgent === 'unregistered_partner'" class="widget-section">
         <button 
           class="widget-toggle-btn"
           @click="toggleBrowserWidget"
@@ -190,7 +218,9 @@
         </button>
         
         <div v-if="showBrowserWidget" class="browser-widget-container animate-fade-in">
-          <p class="field-hint" style="margin-bottom: 0.5rem; text-align: center;">Speak directly with the Registration Agent in your browser:</p>
+          <p class="field-hint" style="margin-bottom: 0.5rem; text-align: center;">
+            Speak directly with the {{ selectedAgent === 'unregistered_partner' ? 'Unregistered Partner' : 'Registration' }} Agent in your browser:
+          </p>
           <div class="elevenlabs-widget-wrapper">
             <div v-html="widgetHtml"></div>
           </div>
@@ -358,7 +388,7 @@ export default {
 
   data() {
     return {
-      selectedAgent: 'booking', // booking | registration | booking_confirmation
+      selectedAgent: 'booking', // booking | registration | booking_confirmation | unregistered_partner
       customerName: '',
       phoneNumber: '',
       partnerName: '',
@@ -371,6 +401,10 @@ export default {
       registrationPending: true,
       remainingData: '',
       showBrowserWidget: false,
+
+      // Unregistered Partner Agent fields
+      companyName: 'Ohyes',
+      businessCategory: 'Cleaning',
 
       // Booking Confirmation Agent fields (Sam — agent_7001ksprhd41ec79dttg7yxrw3ga)
       confirmAddress: '',
@@ -423,7 +457,10 @@ export default {
       }
     },
     widgetHtml() {
-      return '<elevenlabs-convai agent-id="agent_8701ksmkp18cfm6t0a4mrqjhr785"></elevenlabs-convai>';
+      const agentId = this.selectedAgent === 'unregistered_partner'
+        ? 'agent_8701ksmkp18cfm6t0a4mrqjhr785'
+        : 'agent_8701ksmkp18cfm6t0a4mrqjhr785';
+      return `<elevenlabs-convai agent-id="${agentId}"></elevenlabs-convai>`;
     }
   },
 
@@ -443,9 +480,11 @@ export default {
       if (params.get('address'))       this.confirmAddress = params.get('address')
       if (params.get('service_type'))  this.confirmServiceType = params.get('service_type')
       if (params.get('date'))          this.confirmDate = params.get('date')
+      if (params.get('company_name')) this.companyName = params.get('company_name')
+      if (params.get('business_category')) this.businessCategory = params.get('business_category')
       if (params.get('agent')) {
         const agentParam = params.get('agent').toLowerCase()
-        if (['registration', 'booking', 'booking_confirmation'].includes(agentParam)) {
+        if (['registration', 'booking', 'booking_confirmation', 'unregistered_partner'].includes(agentParam)) {
           this.selectedAgent = agentParam
         }
       }
@@ -512,7 +551,9 @@ export default {
     async initiateCall() {
       // Validation
       if (!this.customerName.trim()) {
-        this.errorMessage = 'Please enter the customer name.'
+        this.errorMessage = this.selectedAgent === 'unregistered_partner' 
+          ? 'Please enter the business name.' 
+          : 'Please enter the customer name.'
         return
       }
       if (!this.phoneNumber.trim()) {
@@ -539,6 +580,8 @@ export default {
         callEndpoint = this.backendUrl.replace('/initiate-call', '/initiate-registration')
       } else if (this.selectedAgent === 'booking_confirmation') {
         callEndpoint = this.backendUrl.replace('/initiate-call', '/initiate-booking-confirmation')
+      } else if (this.selectedAgent === 'unregistered_partner') {
+        callEndpoint = this.backendUrl.replace('/initiate-call', '/initiate-unregistered-partner')
       }
 
       // Construct dynamic payload
@@ -560,6 +603,9 @@ export default {
         payload.address      = this.confirmAddress.trim()
         payload.service_type = this.confirmServiceType.trim()
         payload.date         = this.confirmDate.trim()
+      } else if (this.selectedAgent === 'unregistered_partner') {
+        payload.company_name = this.companyName.trim()
+        payload.business_category = this.businessCategory.trim()
       }
 
       try {
@@ -901,6 +947,8 @@ export default {
 /* Agent Selection Styles */
 .agent-selector {
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -908,7 +956,7 @@ export default {
   margin-bottom: 1.5rem;
 }
 .agent-tab {
-  flex: 1;
+  flex: 1 1 calc(50% - 4px);
   display: flex;
   align-items: center;
   justify-content: center;

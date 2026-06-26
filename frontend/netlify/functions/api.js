@@ -188,9 +188,9 @@ router.post('/initiate-booking-confirmation', async (req, res) => {
       to_number,
       customer_name,
       dynamic_variables: {
-        address:      address      || '',
+        address: address || '',
         service_type: service_type || '',
-        date:         date         || '',
+        date: date || '',
       }
     });
 
@@ -228,6 +228,39 @@ router.post('/initiate-registration', async (req, res) => {
     return res.json(result);
   } catch (err) {
     console.error('[Netlify Function] Registration call error:', err);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// ── POST /initiate-unregistered-partner ──────────────────────────────────────
+// Specific Unregistered Partner Trigger API
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/initiate-unregistered-partner', async (req, res) => {
+  try {
+    const {
+      to_number,
+      customer_name,
+      company_name,
+      business_category
+    } = req.body;
+
+    const result = await triggerOutboundCall({
+      agent_id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785', // Unregistered Partners Agent
+      to_number,
+      customer_name,
+      dynamic_variables: {
+        company_name: company_name || 'Ohyes',
+        business_name: customer_name || 'Partner',
+        business_category: business_category || 'Cleaning',
+        companyName: company_name || 'Ohyes',
+        businessName: customer_name || 'Partner',
+        businessCategory: business_category || 'Cleaning'
+      }
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[Netlify Function] Unregistered partner call error:', err);
     return res.status(400).json({ error: err.message });
   }
 });

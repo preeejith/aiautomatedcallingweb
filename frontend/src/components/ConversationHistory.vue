@@ -15,8 +15,8 @@
         </div>
         <div class="filter-group">
           <label class="filter-label">Filter Agent:</label>
-          <select v-model="selectedAgentId" class="select-input" @change="fetchConversations">
-            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+          <select v-model="selectedAgentKey" class="select-input" @change="fetchConversations">
+            <option v-for="agent in agents" :key="agent.key" :value="agent.key">
               {{ agent.name }}
             </option>
           </select>
@@ -80,9 +80,18 @@
                   <div v-else-if="transcriptError" class="transcript-error">{{ transcriptError }}</div>
                   <div v-else-if="transcriptData" class="transcript-wrapper">
                     <!-- Caller Info -->
-                    <div v-if="transcriptMetadata && (transcriptMetadata.phone_number || transcriptMetadata.address || transcriptMetadata.service_type || transcriptMetadata.date)" class="caller-box" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div v-if="transcriptMetadata && (transcriptMetadata.phone_number || transcriptMetadata.address || transcriptMetadata.service_type || transcriptMetadata.date || transcriptMetadata.company_name || transcriptMetadata.companyName || transcriptMetadata.business_name || transcriptMetadata.businessName || transcriptMetadata.business_category || transcriptMetadata.businessCategory)" class="caller-box" style="display: flex; flex-direction: column; gap: 0.5rem;">
                       <div v-if="transcriptMetadata.phone_number">
                         <strong>📞 Phone Number:</strong> <span class="mono">{{ transcriptMetadata.phone_number }}</span>
+                      </div>
+                      <div v-if="transcriptMetadata.company_name || transcriptMetadata.companyName">
+                        <strong>🏢 Company Name:</strong> <span>{{ transcriptMetadata.company_name || transcriptMetadata.companyName }}</span>
+                      </div>
+                      <div v-if="transcriptMetadata.business_name || transcriptMetadata.businessName">
+                        <strong>🏢 Business Name:</strong> <span>{{ transcriptMetadata.business_name || transcriptMetadata.businessName }}</span>
+                      </div>
+                      <div v-if="transcriptMetadata.business_category || transcriptMetadata.businessCategory">
+                        <strong>🏷️ Business Category:</strong> <span>{{ transcriptMetadata.business_category || transcriptMetadata.businessCategory }}</span>
                       </div>
                       <div v-if="transcriptMetadata.address">
                         <strong>📍 Service Address:</strong> <span>{{ transcriptMetadata.address }}</span>
@@ -195,11 +204,12 @@ export default {
       isLoading: true,
       errorMessage: '',
       
-      selectedAgentId: '',
+      selectedAgentKey: 'booking',
       agents: [
-        { name: 'Service Booking Agent (Default)', id: '' },
-        { name: 'Registration Agent', id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785' },
-        { name: 'Booking Confirmation Agent (Sam)', id: 'agent_7001ksprhd41ec79dttg7yxrw3ga' }
+        { name: 'Service Booking Agent (Default)', key: 'booking', id: '' },
+        { name: 'Registration Agent', key: 'registration', id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785' },
+        { name: 'Unregistered Partner Agent', key: 'unregistered_partner', id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785' },
+        { name: 'Booking Confirmation Agent (Sam)', key: 'booking_confirmation', id: 'agent_7001ksprhd41ec79dttg7yxrw3ga' }
       ],
 
       expandedId: null,
@@ -252,16 +262,36 @@ export default {
       this.expandedId = null
       this.transcriptData = null
       try {
+        const agent = this.agents.find(a => a.key === this.selectedAgentKey)
+        const agentId = agent ? agent.id : ''
+
         let url = `${this.backendUrl}/conversations`
-        if (this.selectedAgentId) {
-          url += `?agent_id=${this.selectedAgentId}`
+        if (agentId) {
+          url += `?agent_id=${agentId}`
         }
         const res = await fetch(url)
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Failed to fetch history')
         
         // ElevenLabs returns { conversations: [...] }
-        this.conversations = data.conversations || []
+        const allConversations = data.conversations || []
+        
+        // Client-side separation for agents sharing the same ID (Registration vs Unregistered Partner)
+        if (this.selectedAgentKey === 'registration') {
+          this.conversations = allConversations.filter(c => {
+            if (!c.call_summary_title) return true; // keep if unknown/unprocessed
+            const title = c.call_summary_title.toLowerCase();
+            return title.includes('reg') || title.includes('registration');
+          });
+        } else if (this.selectedAgentKey === 'unregistered_partner') {
+          this.conversations = allConversations.filter(c => {
+            if (!c.call_summary_title) return true; // keep if unknown/unprocessed
+            const title = c.call_summary_title.toLowerCase();
+            return !(title.includes('reg') || title.includes('registration'));
+          });
+        } else {
+          this.conversations = allConversations;
+        }
       } catch (err) {
         this.errorMessage = err.message
       } finally {
