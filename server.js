@@ -55,7 +55,18 @@ async function triggerOutboundCall({
   console.log(`\n🚀 INITIATING OUTBOUND CALL:`);
   console.log(`   To: ${to_number}`);
   console.log(`   Agent ID: ${selectedAgentId}`);
-  console.log(`   Dynamic Variables:`, { ...dynamic_variables, user_name: finalCustomerName, name: finalCustomerName, user_name_there: finalCustomerName });
+  console.log(`   Dynamic Variables:`, {
+    ...dynamic_variables,
+    user_name: finalCustomerName,
+    name: finalCustomerName,
+    customer_name: finalCustomerName,
+    customerName: finalCustomerName,
+    client_name: finalCustomerName,
+    clientName: finalCustomerName,
+    first_name: finalCustomerName,
+    firstName: finalCustomerName,
+    user_name_there: finalCustomerName
+  });
 
   const response = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
     method: 'POST',
@@ -71,6 +82,12 @@ async function triggerOutboundCall({
         dynamic_variables: {
           user_name: finalCustomerName,
           name: finalCustomerName,
+          customer_name: finalCustomerName,
+          customerName: finalCustomerName,
+          client_name: finalCustomerName,
+          clientName: finalCustomerName,
+          first_name: finalCustomerName,
+          firstName: finalCustomerName,
           user_name_there: finalCustomerName, // fallback for ElevenLabs syntax
           phone_number: to_number,
           ...dynamic_variables
@@ -163,6 +180,38 @@ app.post('/initiate-booking', async (req, res) => {
     return res.json(result)
   } catch (err) {
     console.error('Booking call error:', err)
+    return res.status(400).json({ error: err.message })
+  }
+})
+
+// ── POST /initiate-booking-confirmation ──────────────────────────────────────
+// Booking Confirmation Agent — Sam (agent_7001ksprhd41ec79dttg7yxrw3ga)
+// Collects: customer_name, address, service_type, date
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/initiate-booking-confirmation', async (req, res) => {
+  try {
+    const {
+      to_number,
+      customer_name,
+      address,
+      service_type,
+      date,
+    } = req.body
+
+    const result = await triggerOutboundCall({
+      agent_id: 'agent_7001ksprhd41ec79dttg7yxrw3ga', // Booking Confirmation Agent — Sam
+      to_number,
+      customer_name,
+      dynamic_variables: {
+        address: address || '',
+        service_type: service_type || '',
+        date: date || '',
+      }
+    })
+
+    return res.json(result)
+  } catch (err) {
+    console.error('Booking confirmation call error:', err)
     return res.status(400).json({ error: err.message })
   }
 })
@@ -319,6 +368,35 @@ app.get('/conversations', async (req, res) => {
     return res.status(500).json({ error: err.message || 'Internal server error.' })
   }
 })
+
+// ── DELETE /conversation/:id ──────────────────────────────────────────────────
+// Deletes a conversation from ElevenLabs after verifying password
+// ─────────────────────────────────────────────────────────────────────────────
+app.delete('/conversation/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    if (password !== 'qwertyu') {
+      return res.status(403).json({ error: 'Incorrect password' });
+    }
+
+    const response = await fetch(`https://api.elevenlabs.io/v1/convai/conversations/${id}`, {
+      method: 'DELETE',
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY }
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      return res.status(response.status).json({ error: data?.detail?.message || 'Failed to delete conversation' });
+    }
+
+    return res.json({ success: true, message: 'Conversation deleted successfully' });
+  } catch (err) {
+    console.error('Delete conversation error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok' }))

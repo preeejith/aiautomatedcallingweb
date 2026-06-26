@@ -36,6 +36,15 @@
           <span class="tab-icon">📋</span>
           <span class="tab-label">Registration</span>
         </button>
+        <button 
+          class="agent-tab" 
+          :class="{ active: selectedAgent === 'booking_confirmation' }"
+          @click="selectedAgent = 'booking_confirmation'"
+          :disabled="isLoading"
+        >
+          <span class="tab-icon">✅</span>
+          <span class="tab-label">Confirm Booking</span>
+        </button>
       </div>
 
       <!-- Status Bar -->
@@ -122,6 +131,30 @@
           <div class="field-group">
             <label class="field-label">⚠️ Missing Data Details</label>
             <input v-model="remainingData" type="text" class="field-input" placeholder="e.g. Email is missing, please verify" :disabled="isLoading" />
+          </div>
+        </template>
+
+        <!-- BOOKING CONFIRMATION AGENT SPECIFIC FIELDS -->
+        <template v-else-if="selectedAgent === 'booking_confirmation'">
+          <div class="field-group">
+            <label class="field-label">📍 Service Address</label>
+            <input v-model="confirmAddress" type="text" class="field-input" placeholder="e.g. 12, MG Road, Bengaluru" :disabled="isLoading" />
+          </div>
+
+          <div class="field-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="field-group">
+              <label class="field-label">🔧 Service Type</label>
+              <input v-model="confirmServiceType" type="text" class="field-input" placeholder="e.g. House Cleaning" :disabled="isLoading" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">📅 Booking Date</label>
+              <input v-model="confirmDate" type="text" class="field-input" placeholder="e.g. 25 Jun at 10:00 AM" :disabled="isLoading" />
+            </div>
+          </div>
+
+          <div class="confirmation-note">
+            <span class="note-icon">💡</span>
+            <span>Sam will greet <strong>{{ customerName || 'the customer' }}</strong> and confirm all booking details over the call.</span>
           </div>
         </template>
       </div>
@@ -325,7 +358,7 @@ export default {
 
   data() {
     return {
-      selectedAgent: 'booking', // booking | registration
+      selectedAgent: 'booking', // booking | registration | booking_confirmation
       customerName: '',
       phoneNumber: '',
       partnerName: '',
@@ -338,6 +371,11 @@ export default {
       registrationPending: true,
       remainingData: '',
       showBrowserWidget: false,
+
+      // Booking Confirmation Agent fields (Sam — agent_7001ksprhd41ec79dttg7yxrw3ga)
+      confirmAddress: '',
+      confirmServiceType: '',
+      confirmDate: '',
 
       isDisconnecting: false,
       isLoading: false,
@@ -401,9 +439,13 @@ export default {
       if (params.get('email'))         this.email = params.get('email')
       if (params.get('registration_pending')) this.registrationPending = params.get('registration_pending') === 'true'
       if (params.get('remaining_data')) this.remainingData = params.get('remaining_data')
+      // Booking Confirmation params
+      if (params.get('address'))       this.confirmAddress = params.get('address')
+      if (params.get('service_type'))  this.confirmServiceType = params.get('service_type')
+      if (params.get('date'))          this.confirmDate = params.get('date')
       if (params.get('agent')) {
         const agentParam = params.get('agent').toLowerCase()
-        if (agentParam === 'registration' || agentParam === 'booking') {
+        if (['registration', 'booking', 'booking_confirmation'].includes(agentParam)) {
           this.selectedAgent = agentParam
         }
       }
@@ -491,26 +533,37 @@ export default {
       this.isLoading    = true
       this.status       = 'calling'
 
+      // Determine endpoint based on selected agent
+      let callEndpoint = this.backendUrl // default: /initiate-call
+      if (this.selectedAgent === 'registration') {
+        callEndpoint = this.backendUrl.replace('/initiate-call', '/initiate-registration')
+      } else if (this.selectedAgent === 'booking_confirmation') {
+        callEndpoint = this.backendUrl.replace('/initiate-call', '/initiate-booking-confirmation')
+      }
+
       // Construct dynamic payload
       const payload = {
-        to_number:       this.phoneNumber.trim(),
-        customer_name:   this.customerName.trim(),
-        agent_id:        this.selectedAgent === 'registration' ? 'agent_8701ksmkp18cfm6t0a4mrqjhr785' : undefined,
+        to_number:     this.phoneNumber.trim(),
+        customer_name: this.customerName.trim(),
       }
 
       if (this.selectedAgent === 'booking') {
-        payload.partner_name = this.partnerName.trim()
-        payload.location = this.location.trim()
-        payload.service_name = this.serviceName.trim()
+        payload.partner_name    = this.partnerName.trim()
+        payload.location        = this.location.trim()
+        payload.service_name    = this.serviceName.trim()
         payload.service_details = this.serviceDetails.trim()
-      } else {
-        payload.email = this.email.trim()
+      } else if (this.selectedAgent === 'registration') {
+        payload.email                = this.email.trim()
         payload.registration_pending = this.registrationPending
-        payload.remaining_data = this.remainingData.trim()
+        payload.remaining_data       = this.remainingData.trim()
+      } else if (this.selectedAgent === 'booking_confirmation') {
+        payload.address      = this.confirmAddress.trim()
+        payload.service_type = this.confirmServiceType.trim()
+        payload.date         = this.confirmDate.trim()
       }
 
       try {
-        const response = await fetch(this.backendUrl, {
+        const response = await fetch(callEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -913,6 +966,22 @@ export default {
   cursor: pointer;
   user-select: none;
 }
+
+/* ── Booking Confirmation Note ── */
+.confirmation-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+.confirmation-note strong { color: #34d399; }
+.note-icon { font-size: 0.95rem; flex-shrink: 0; }
 
 /* Web Widget styles */
 .widget-section {

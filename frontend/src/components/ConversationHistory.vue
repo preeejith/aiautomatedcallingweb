@@ -61,9 +61,14 @@
                 <td>{{ formatDuration(conv.call_duration_secs) }}</td>
                 <td class="mono">{{ conv.conversation_id.substring(0, 12) }}...</td>
                 <td>
-                  <button class="view-btn" @click="toggleTranscript(conv.conversation_id)">
-                    {{ expandedId === conv.conversation_id ? 'Hide' : 'Transcript' }}
-                  </button>
+                  <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <button class="view-btn" @click="toggleTranscript(conv.conversation_id)">
+                      {{ expandedId === conv.conversation_id ? 'Hide' : 'Transcript' }}
+                    </button>
+                    <button class="delete-btn" title="Delete conversation" @click="confirmDelete(conv.conversation_id)">
+                      🗑️
+                    </button>
+                  </div>
                 </td>
               </tr>
               <!-- Embedded Transcript -->
@@ -75,8 +80,19 @@
                   <div v-else-if="transcriptError" class="transcript-error">{{ transcriptError }}</div>
                   <div v-else-if="transcriptData" class="transcript-wrapper">
                     <!-- Caller Info -->
-                    <div v-if="transcriptMetadata && transcriptMetadata.phone_number" class="caller-box">
-                      <strong>📞 Phone Number:</strong> <span class="mono">{{ transcriptMetadata.phone_number }}</span>
+                    <div v-if="transcriptMetadata && (transcriptMetadata.phone_number || transcriptMetadata.address || transcriptMetadata.service_type || transcriptMetadata.date)" class="caller-box" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                      <div v-if="transcriptMetadata.phone_number">
+                        <strong>📞 Phone Number:</strong> <span class="mono">{{ transcriptMetadata.phone_number }}</span>
+                      </div>
+                      <div v-if="transcriptMetadata.address">
+                        <strong>📍 Service Address:</strong> <span>{{ transcriptMetadata.address }}</span>
+                      </div>
+                      <div v-if="transcriptMetadata.service_type">
+                        <strong>🔧 Service Type:</strong> <span>{{ transcriptMetadata.service_type }}</span>
+                      </div>
+                      <div v-if="transcriptMetadata.date">
+                        <strong>📅 Booking Date:</strong> <span>{{ transcriptMetadata.date }}</span>
+                      </div>
                     </div>
 
                     <!-- NEW: Sentiment Evaluations -->
@@ -182,7 +198,8 @@ export default {
       selectedAgentId: '',
       agents: [
         { name: 'Service Booking Agent (Default)', id: '' },
-        { name: 'Registration Agent', id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785' }
+        { name: 'Registration Agent', id: 'agent_8701ksmkp18cfm6t0a4mrqjhr785' },
+        { name: 'Booking Confirmation Agent (Sam)', id: 'agent_7001ksprhd41ec79dttg7yxrw3ga' }
       ],
 
       expandedId: null,
@@ -279,6 +296,41 @@ export default {
         this.transcriptError = err.message
       } finally {
         this.isFetchingTranscript = false
+      }
+    },
+    async confirmDelete(id) {
+      const password = prompt('Enter deletion password to confirm:');
+      if (password === null) return; // User cancelled
+      
+      if (password !== 'qwertyu') {
+        alert('Incorrect password! Deletion aborted.');
+        return;
+      }
+
+      if (!confirm('Are you sure you want to permanently delete this conversation? This cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`${this.backendUrl}/conversation/${id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to delete');
+
+        alert('Conversation deleted successfully.');
+        
+        // Remove from local list
+        this.conversations = this.conversations.filter(c => c.conversation_id !== id);
+        if (this.expandedId === id) {
+          this.expandedId = null;
+          this.transcriptData = null;
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
       }
     },
     formatDate(unixSecs) {
@@ -432,6 +484,24 @@ export default {
   cursor: pointer; transition: all .2s;
 }
 .view-btn:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); }
+
+.delete-btn {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: #f87171;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.delete-btn:hover {
+  background: rgba(248, 113, 113, 0.25);
+  border-color: #f87171;
+}
 
 .conv-row.expanded td { border-bottom: none; background: rgba(124,92,252,0.03); }
 .transcript-row td { padding: 0 1rem 1.5rem 1rem; border-bottom: 1px solid rgba(255,255,255,.1); background: rgba(124,92,252,0.03); }
